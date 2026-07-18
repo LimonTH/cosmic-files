@@ -2,6 +2,7 @@ use cosmic::widget;
 use regex::Regex;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use crate::config::IconSizes;
 use crate::tab::{Item, SearchItem};
@@ -89,7 +90,7 @@ pub fn trash_item_path(item: &trash::TrashItem) -> Option<PathBuf> {
 /// - Read `~/.local/share/Trash/info/folder.trashinfo` to get the original path
 /// - Compute: `<original_path>/sub/file.txt`
 pub fn original_path_for_trash_child(p: &Path) -> Option<PathBuf> {
-    let files = p.ancestors().find(|a| a.ends_with("files"))?;
+    let files = trash_files_dir(p)?;
     let root = files.parent()?;
     let top = p.strip_prefix(files).ok()?.components().next()?;
     let info =
@@ -103,9 +104,29 @@ pub fn original_path_for_trash_child(p: &Path) -> Option<PathBuf> {
     Some(result)
 }
 
+static TRASH_FOLDERS: LazyLock<HashSet<PathBuf>> = LazyLock::new(|| {
+    Trash::folders().unwrap_or_else(|e| {
+        log::warn!("failed to list trash folders: {}", e);
+        HashSet::new()
+    })
+});
+
+fn is_trash_root(root: &Path) -> bool {
+    if TRASH_FOLDERS.is_empty() {
+        root.join("info").is_dir()
+    } else {
+        TRASH_FOLDERS.contains(root)
+    }
+}
+
+fn trash_files_dir(path: &Path) -> Option<&Path> {
+    path.ancestors()
+        .find(|a| a.ends_with("files") && a.parent().is_some_and(is_trash_root))
+}
+
 /// Check whether a path is inside any trash `files/` directory.
 pub fn is_trash_path(path: &Path) -> bool {
-    path.ancestors().any(|a| a.ends_with("files"))
+    trash_files_dir(path).is_some()
 }
 
 pub struct Trash;
