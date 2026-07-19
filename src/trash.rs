@@ -93,8 +93,9 @@ pub fn original_path_for_trash_child(p: &Path) -> Option<PathBuf> {
     let files = trash_files_dir(p)?;
     let root = files.parent()?;
     let top = p.strip_prefix(files).ok()?.components().next()?;
-    let info =
-        std::fs::read_to_string(root.join("info").join(top).with_extension("trashinfo")).ok()?;
+    let mut trashinfo_name = top.as_os_str().to_os_string();
+    trashinfo_name.push(".trashinfo");
+    let info = std::fs::read_to_string(root.join("info").join(trashinfo_name)).ok()?;
     let orig = percent_decode(info.lines().find_map(|l| l.strip_prefix("Path="))?.trim())?;
     let rel = p.strip_prefix(files.join(top)).ok()?;
     let mut result = PathBuf::from(&orig);
